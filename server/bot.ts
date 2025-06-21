@@ -1,3 +1,226 @@
+
+import { createBot, Bot } from 'mineflayer';
+import { storage } from './storage';
+import type { InsertChatMessage, InsertBotStatus } from '@shared/schema';
+import { WebSocket } from 'ws';
+
+export class MinecraftBot {
+  private bot: Bot | null = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private autoJumpInterval: NodeJS.Timeout | null = null;
+  private webSocketClients: Set<WebSocket> = new Set();
+
+  constructor() {}
+
+  addWebSocketClient(ws: WebSocket): void {
+    this.webSocketClients.add(ws);
+    ws.on('close', () => {
+      this.webSocketClients.delete(ws);
+    });
+  }
+
+  private broadcastToClients(message: any): void {
+    const messageStr = JSON.stringify(message);
+    this.webSocketClients.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(messageStr);
+      }
+    });
+  }
+
+  private async addChatMessage(message: InsertChatMessage): Promise<void> {
+    const chatMessage = await storage.insertChatMessage(message);
+    this.broadcastToClients({
+      type: 'chat',
+      data: {
+        type: chatMessage.type,
+        username: chatMessage.username,
+        message: chatMessage.message,
+        timestamp: chatMessage.timestamp.toISOString()
+      }
+    });
+  }
+
+  private async updateStatus(status: Partial<InsertBotStatus>): Promise<void> {
+    const currentStatus = await storage.getBotStatus();
+    const newStatus = await storage.updateBotStatus({
+      status: currentStatus?.status || 'offline',
+      username: currentStatus?.username || 'King97334',
+      server: currentStatus?.server || 'survival-2',
+      serverIp: currentStatus?.serverIp || 'survival-2.minehut.gg',
+      version: currentStatus?.version || '1.21.4',
+      uptime: currentStatus?.uptime || 0,
+      autoJump: currentStatus?.autoJump || false,
+      ...status
+    });
+
+    this.broadcastToClients({
+      type: 'status',
+      data: newStatus
+    });
+  }
+
+  private async initializeBot(): Promise<void> {
+    try {
+      await this.updateStatus({ status: 'connecting' });
+      
+      const currentStatus = await storage.getBotStatus();
+      const serverIp = currentStatus?.serverIp || 'survival-2.minehut.gg';
+      const username = currentStatus?.username || 'King97334';
+
+      this.bot = createBot({
+        host: serverIp,
+        port: 25565,
+        username: username,
+        version: '1.21.4',
+        auth: 'offline'
+      });
+
+      this.bot.on('login', async () => {
+        console.log('Bot connected to Minecraft server');
+        await this.updateStatus({ 
+          status: 'online',
+          uptime: 0
+        });
+        await this.addChatMessage({
+          type: 'system',
+          message: `Connected to ${serverIp}`
+        });
+      });
+
+      this.bot.on('chat', async (username, message) => {
+        await this.addChatMessage({
+          type: 'player',
+          username,
+          message
+        });
+      });
+
+      this.bot.on('error', async (err) => {
+        console.error('Bot error:', err);
+        await this.addChatMessage({
+          type: 'error',
+          message: `Bot error: ${err.message}`
+        });
+        await this.updateStatus({ status: 'error' });
+      });
+
+      this.bot.on('end', async () => {
+        console.log('Bot disconnected');
+        await this.updateStatus({ status: 'offline' });
+        await this.addChatMessage({
+          type: 'system',
+          message: 'Bot disconnected'
+        });
+        this.bot = null;
+      });
+
+    } catch (error) {
+      console.error('Failed to initialize bot:', error);
+      await this.updateStatus({ status: 'error' });
+      await this.addChatMessage({
+        type: 'error',
+        message: `Failed to connect: ${error}`
+      });
+    }
+  }
+
+  async sendMessage(message: string): Promise<void> {
+    if (this.bot && this.bot.entity) {
+      this.bot.chat(message);
+      await this.addChatMessage({
+        type: 'bot',
+        username: this.bot.username,
+        message
+      });
+    }
+  }
+
+  async sendCommand(command: string): Promise<void> {
+    if (this.bot && this.bot.entity) {
+      console.log('Sending command:', command);
+      this.bot.chat(command);
+      await this.addChatMessage({
+        type: 'command',
+        username: this.bot.username,
+        message: command
+      });
+    }
+  }
+
+  async toggleAutoJump(): Promise<void> {
+    const currentStatus = await storage.getBotStatus();
+    const newAutoJump = !currentStatus?.autoJump;
+    
+    await this.updateStatus({ autoJump: newAutoJump });
+
+    if (newAutoJump) {
+      this.autoJumpInterval = setInterval(() => {
+        if (this.bot && this.bot.entity) {
+          this.bot.setControlState('jump', true);
+          setTimeout(() => {
+            if (this.bot) {
+              this.bot.setControlState('jump', false);
+            }
+          }, 100);
+        }
+      }, 1000);
+      
+      await this.addChatMessage({
+        type: 'system',
+        message: 'Auto-jump enabled'
+      });
+    } else {
+      if (this.autoJumpInterval) {
+        clearInterval(this.autoJumpInterval);
+        this.autoJumpInterval = null;
+      }
+      await this.addChatMessage({
+        type: 'system',
+        message: 'Auto-jump disabled'
+      });
+    }
+  }
+
+  async updateServerIp(serverIp: string): Promise<void> {
+    // Disconnect if currently connected
+    if (this.bot) {
+      await this.disconnect();
+    }
+    
+    // Update the server IP in storage
+    await this.updateStatus({ serverIp });
+    
+    await this.addChatMessage({
+      type: 'system',
+      message: `Server IP updated to: ${serverIp}`
+    });
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    
+    if (this.autoJumpInterval) {
+      clearInterval(this.autoJumpInterval);
+      this.autoJumpInterval = null;
+    }
+
+    if (this.bot) {
+      this.bot.quit();
+      this.bot = null;
+    }
+
+    await this.updateStatus({ status: 'offline' });
+  }
+
+  async connect(): Promise<void> {
+    await this.initializeBot();
+  }
+}
+
 import mineflayer from 'mineflayer';
 import { storage } from './storage';
 import { WebSocket } from 'ws';
@@ -263,6 +486,21 @@ export class MinecraftBot {
     }
 
     await this.updateStatus({ status: 'offline' });
+  }
+
+  async updateServerIp(serverIp: string): Promise<void> {
+    // Disconnect if currently connected
+    if (this.bot) {
+      await this.disconnect();
+    }
+    
+    // Update the server IP in storage
+    await this.updateStatus({ serverIp });
+    
+    await this.addChatMessage({
+      type: 'system',
+      message: `Server IP updated to: ${serverIp}`
+    });
   }
 
   async connect(): Promise<void> {

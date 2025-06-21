@@ -28,6 +28,7 @@ export class MemStorage implements IStorage {
       status: 'offline',
       username: 'King97334',
       server: 'survival-2',
+      serverIp: 'survival-2.minehut.gg',
       version: '1.21.4',
       uptime: 0,
       autoJump: false,

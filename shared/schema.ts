@@ -15,6 +15,7 @@ export const botStatus = pgTable("bot_status", {
   status: text("status").notNull(), // 'online', 'offline', 'connecting', 'error'
   username: text("username").notNull(),
   server: text("server"),
+  serverIp: text("server_ip").default("survival-2.minehut.gg"),
   version: text("version").notNull(),
   uptime: integer("uptime").default(0), // seconds
   autoJump: boolean("auto_jump").default(false),

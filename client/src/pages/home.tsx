@@ -1,10 +1,11 @@
+import { useQuery } from "@tanstack/react-query";
 import { BotStatus } from "@/components/bot-status";
 import { BotControls } from "@/components/bot-controls";
-import { QuickCommands } from "@/components/quick-commands";
 import { ChatMessages } from "@/components/chat-messages";
 import { ChatInput } from "@/components/chat-input";
+import { QuickCommands } from "@/components/quick-commands";
+import { ServerIpConfig } from "@/components/server-ip-config";
 import { useWebSocket } from "@/hooks/use-websocket";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Bot, Hash, Trash2, Users } from "lucide-react";

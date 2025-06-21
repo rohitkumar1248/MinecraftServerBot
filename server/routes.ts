@@ -66,6 +66,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/bot/update-ip", async (req, res) => {
+    try {
+      const { serverIp } = req.body;
+      if (!serverIp) {
+        return res.status(400).json({ error: "Server IP is required" });
+      }
+      await minecraftBot.updateServerIp(serverIp);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update server IP" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   // WebSocket Server

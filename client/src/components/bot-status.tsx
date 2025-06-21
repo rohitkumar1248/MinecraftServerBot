@@ -45,7 +45,7 @@ export function BotStatus({ status }: BotStatusProps) {
             </span>
           </span>
         </div>
-        
+
         <div className="bg-discord-darker rounded-lg p-3 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-gray-400">Username:</span>
@@ -53,7 +53,11 @@ export function BotStatus({ status }: BotStatusProps) {
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-400">Server:</span>
-            <span className="text-white font-mono">{status?.server || 'survival-2'}</span>
+            <span className="text-white font-mono">{status?.server || 'N/A'}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-400">Server IP:</span>
+            <span className="text-white font-mono">{status?.serverIp || 'N/A'}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-400">Version:</span>
