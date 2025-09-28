@@ -86,18 +86,6 @@ export type UpsertUser = typeof users.$inferInsert;
 export type BotInstance = typeof botInstances.$inferSelect;
 export type InsertBotInstance = z.infer<typeof insertBotInstanceSchema>;
 
-// Type for real-time bot status updates
-export type BotStatusData = {
-  status: 'online' | 'offline' | 'connecting' | 'error';
-  username: string;
-  server?: string;
-  serverIp?: string;
-  version: string;
-  uptime: number;
-  autoJump: boolean;
-  lastSeen: Date;
-};
-
 // WebSocket message types
 export interface WebSocketMessage {
   type: 'chat' | 'status' | 'command' | 'error';
@@ -115,9 +103,11 @@ export interface BotStatusData {
   status: 'online' | 'offline' | 'connecting' | 'error';
   username: string;
   server?: string;
+  serverIp?: string;
   version: string;
   uptime: number;
   autoJump: boolean;
+  lastSeen?: Date;
 }
 
 export interface CommandData {
