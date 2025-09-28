@@ -197,7 +197,7 @@ export class MinecraftBot {
 
   private async initializeBot(): Promise<void> {
     if (this.bot) {
-      this.bot.quit();
+      this.bot.end();
     }
 
     try {

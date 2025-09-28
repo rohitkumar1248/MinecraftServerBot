@@ -39,7 +39,7 @@ export default function Dashboard() {
     version: '1.21.4'
   });
 
-  const { isConnected, chatMessages, botStatus, sendCommand, clearMessages } = useWebSocket();
+  const { isConnected, chatMessages, botStatus, botStatuses, sendCommand, clearMessages } = useWebSocket();
 
   // Fetch bot instances
   const { data: botInstances = [], isLoading: isLoadingBots } = useQuery<BotInstance[]>({
@@ -185,87 +185,136 @@ export default function Dashboard() {
 
           {/* Bot Control Tab */}
           <TabsContent value="control" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Current Bot Status */}
-              <Card className="bg-gray-800 border-gray-700">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Bot className="w-5 h-5" />
-                    <span>Current Bot Status</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Status:</span>
-                      <Badge variant={botStatus?.status === 'online' ? 'default' : 'secondary'}>
-                        {botStatus?.status || 'offline'}
-                      </Badge>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Username:</span>
-                      <span className="text-white">{botStatus?.username || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Server:</span>
-                      <span className="text-white">{(botStatus as BotStatusData)?.server || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Auto-Jump:</span>
-                      <Badge variant={botStatus?.autoJump ? 'default' : 'secondary'}>
-                        {botStatus?.autoJump ? 'On' : 'Off'}
-                      </Badge>
-                    </div>
+            {/* Multi-Bot Status Overview */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Users className="w-5 h-5" />
+                    <span>Active Bots ({botStatuses.length}/10)</span>
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Bot Controls */}
-              <Card className="bg-gray-800 border-gray-700">
-                <CardHeader>
-                  <CardTitle>Quick Controls</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center space-x-4">
                     <Button 
                       onClick={() => connectMutation.mutate()}
-                      disabled={connectMutation.isPending || botStatus?.status === 'online'}
+                      disabled={connectMutation.isPending}
                       className="bg-green-700 hover:bg-green-600"
-                      data-testid="connect-button"
+                      data-testid="connect-all-button"
                     >
                       <Play className="w-4 h-4 mr-2" />
-                      Connect
+                      Connect All
                     </Button>
                     <Button 
                       onClick={() => disconnectMutation.mutate()}
-                      disabled={disconnectMutation.isPending || botStatus?.status === 'offline'}
+                      disabled={disconnectMutation.isPending}
                       variant="destructive"
-                      data-testid="disconnect-button"
+                      data-testid="disconnect-all-button"
                     >
                       <Square className="w-4 h-4 mr-2" />
-                      Disconnect
-                    </Button>
-                    <Button 
-                      onClick={() => regenerateNameMutation.mutate()}
-                      disabled={regenerateNameMutation.isPending}
-                      variant="outline"
-                      data-testid="regenerate-name-button"
-                    >
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      New Username
-                    </Button>
-                    <Button 
-                      onClick={() => toggleJumpMutation.mutate()}
-                      disabled={toggleJumpMutation.isPending}
-                      variant="outline"
-                      data-testid="toggle-jump-button"
-                    >
-                      Auto-Jump
+                      Disconnect All
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                  {botStatuses.map((bot, index) => (
+                    <div 
+                      key={bot.username || `bot-${index}`}
+                      className="bg-gray-700 rounded-lg p-4 border border-gray-600"
+                      data-testid={`bot-card-${bot.username}`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-white truncate">{bot.username}</h4>
+                        <Badge variant={bot.status === 'online' ? 'default' : 'secondary'} className="text-xs">
+                          {bot.status}
+                        </Badge>
+                      </div>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Version:</span>
+                          <span className="text-gray-200">{bot.version}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Auto-Jump:</span>
+                          <Badge variant={bot.autoJump ? 'default' : 'secondary'} className="text-xs">
+                            {bot.autoJump ? 'On' : 'Off'}
+                          </Badge>
+                        </div>
+                        {bot.uptime > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Uptime:</span>
+                            <span className="text-gray-200">{Math.floor(bot.uptime / 60)}m</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Show placeholder cards for remaining slots */}
+                  {Array.from({ length: Math.max(0, 10 - botStatuses.length) }).map((_, index) => (
+                    <div 
+                      key={`placeholder-${index}`}
+                      className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 border-dashed"
+                      data-testid={`placeholder-bot-${index}`}
+                    >
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center text-gray-500">
+                          <Bot className="w-6 h-6 mx-auto mb-2 opacity-50" />
+                          <span className="text-sm">Slot {botStatuses.length + index + 1}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Global Bot Controls */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader>
+                <CardTitle>Global Controls</CardTitle>
+                <CardDescription className="text-gray-400">
+                  Controls that apply to all connected bots
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Button 
+                    onClick={() => regenerateNameMutation.mutate()}
+                    disabled={regenerateNameMutation.isPending}
+                    variant="outline"
+                    data-testid="regenerate-all-names-button"
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    New Names
+                  </Button>
+                  <Button 
+                    onClick={() => toggleJumpMutation.mutate()}
+                    disabled={toggleJumpMutation.isPending}
+                    variant="outline"
+                    data-testid="toggle-all-jump-button"
+                  >
+                    Toggle Jump
+                  </Button>
+                  <Button 
+                    onClick={() => sendCommand('/list')}
+                    disabled={!isConnected}
+                    variant="outline"
+                    data-testid="list-players-button"
+                  >
+                    List Players
+                  </Button>
+                  <Button 
+                    onClick={() => sendCommand('/spawn')}
+                    disabled={!isConnected}
+                    variant="outline"
+                    data-testid="spawn-all-button"
+                  >
+                    Go to Spawn
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Server Configuration */}
             <Card className="bg-gray-800 border-gray-700">

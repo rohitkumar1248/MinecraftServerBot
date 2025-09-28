@@ -4,7 +4,8 @@ import type { WebSocketMessage, ChatMessageData, BotStatusData } from '@shared/s
 export function useWebSocket() {
   const [isConnected, setIsConnected] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessageData[]>([]);
-  const [botStatus, setBotStatus] = useState<BotStatusData | null>(null);
+  const [botStatuses, setBotStatuses] = useState<BotStatusData[]>([]);
+  const [botStatus, setBotStatus] = useState<BotStatusData | null>(null); // Keep for backward compatibility
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -30,8 +31,26 @@ export function useWebSocket() {
             break;
             
           case 'status':
-            const statusData = message.data as BotStatusData;
-            setBotStatus(statusData);
+            const statusData = message.data as BotStatusData | BotStatusData[];
+            if (Array.isArray(statusData)) {
+              setBotStatuses(statusData);
+              // Set the first online bot as the primary status for backward compatibility
+              const primaryBot = statusData.find(bot => bot.status === 'online') || statusData[0];
+              setBotStatus(primaryBot || null);
+            } else {
+              setBotStatus(statusData);
+              // Update the bot in the statuses array or add it
+              setBotStatuses(prev => {
+                const existingIndex = prev.findIndex(bot => bot.username === statusData.username);
+                if (existingIndex >= 0) {
+                  const updated = [...prev];
+                  updated[existingIndex] = statusData;
+                  return updated;
+                } else {
+                  return [...prev, statusData];
+                }
+              });
+            }
             break;
             
           case 'error':
@@ -87,6 +106,7 @@ export function useWebSocket() {
     isConnected,
     chatMessages,
     botStatus,
+    botStatuses,
     sendCommand,
     clearMessages
   };
