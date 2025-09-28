@@ -6,11 +6,8 @@ import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
+import createMemoryStore from "memorystore";
 import { storage } from "./storage";
-
-if (!process.env.REPLIT_DOMAINS) {
-  throw new Error("Environment variable REPLIT_DOMAINS not provided");
-}
 
 const getOidcConfig = memoize(
   async () => {
@@ -22,26 +19,49 @@ const getOidcConfig = memoize(
   { maxAge: 3600 * 1000 }
 );
 
-export function getSession() {
+function logAuth(message: string) {
+  console.log(`[auth] ${message}`);
+}
+
+export function getSession(authEnabled: boolean) {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  const pgStore = connectPg(session);
-  const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: false,
-    ttl: sessionTtl,
-    tableName: "sessions",
-  });
-  return session({
-    secret: process.env.SESSION_SECRET!,
-    store: sessionStore,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: true,
-      maxAge: sessionTtl,
-    },
-  });
+
+  if (authEnabled) {
+    const pgStore = connectPg(session);
+    const sessionStore = new pgStore({
+      conString: process.env.DATABASE_URL,
+      createTableIfMissing: false,
+      ttl: sessionTtl,
+      tableName: "sessions",
+    });
+    return session({
+      secret: process.env.SESSION_SECRET!,
+      store: sessionStore,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: true,
+        maxAge: sessionTtl,
+      },
+    });
+  } else {
+    // Fallback to in-memory session store when auth is disabled
+    const MemoryStore = createMemoryStore(session);
+    const sessionStore = new MemoryStore({ checkPeriod: sessionTtl });
+    return session({
+      secret: process.env.SESSION_SECRET ?? "dev-secret",
+      store: sessionStore,
+      resave: false,
+      saveUninitialized: true,
+      cookie: {
+        httpOnly: true,
+        // Use non-secure cookies when auth is disabled (e.g., local/dev)
+        secure: false,
+        maxAge: sessionTtl,
+      },
+    });
+  }
 }
 
 function updateUserSession(
@@ -68,7 +88,29 @@ async function upsertUser(
 
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
-  app.use(getSession());
+
+  const authEnvPresent =
+    !!process.env.REPLIT_DOMAINS &&
+    !!process.env.DATABASE_URL &&
+    !!process.env.SESSION_SECRET &&
+    !!process.env.REPL_ID;
+
+  // Attach a flag to app locals
+  (app as any).locals.authEnabled = authEnvPresent;
+
+  if (!authEnvPresent) {
+    logAuth(
+      "Auth disabled: missing one or more env vars (REPLIT_DOMAINS, DATABASE_URL, SESSION_SECRET, REPL_ID). Falling back to memory session and bypassing OIDC.",
+    );
+  }
+
+  app.use(getSession(authEnvPresent));
+
+  if (!authEnvPresent) {
+    // Skip passport/OIDC setup entirely
+    return;
+  }
+
   app.use(passport.initialize());
   app.use(passport.session());
 
@@ -84,8 +126,7 @@ export async function setupAuth(app: Express) {
     verified(null, user);
   };
 
-  for (const domain of process.env
-    .REPLIT_DOMAINS!.split(",")) {
+  for (const domain of process.env.REPLIT_DOMAINS!.split(",")) {
     const strategy = new Strategy(
       {
         name: `replitauth:${domain}`,
@@ -128,6 +169,12 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  // If auth is disabled, allow all requests
+  const authEnabled = (req.app as any).locals?.authEnabled;
+  if (!authEnabled) {
+    return next();
+  }
+
   const user = req.user as any;
 
   if (!req.isAuthenticated() || !user.expires_at) {
