@@ -4,6 +4,92 @@ import type { InsertChatMessage, InsertBotStatus } from '@shared/schema';
 import { WebSocket } from 'ws';
 import type { ChatMessageData, BotStatusData, WebSocketMessage } from '@shared/schema';
 
+export class MultiBotManager {
+  private botInstances: Map<string, MinecraftBot> = new Map();
+  private webSocketClients: Set<WebSocket> = new Set();
+
+  constructor() {
+    // Initialize 10 bots automatically
+    this.initializeMultipleBots();
+  }
+
+  addWebSocketClient(ws: WebSocket): void {
+    this.webSocketClients.add(ws);
+    ws.on('close', () => {
+      this.webSocketClients.delete(ws);
+    });
+  }
+
+  private broadcastToClients(message: any): void {
+    const messageStr = JSON.stringify(message);
+    this.webSocketClients.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(messageStr);
+      }
+    });
+  }
+
+  private async initializeMultipleBots(): Promise<void> {
+    console.log('Initializing 10 bot instances...');
+    
+    for (let i = 1; i <= 10; i++) {
+      const botId = `bot_${i}`;
+      const bot = new MinecraftBot();
+      bot.setBotId(botId);
+      bot.setWebSocketClients(this.webSocketClients);
+      this.botInstances.set(botId, bot);
+      
+      // Delay each bot connection by 5 seconds to avoid server throttling
+      setTimeout(() => {
+        bot.connect();
+      }, i * 5000);
+    }
+  }
+
+  getAllBots(): MinecraftBot[] {
+    return Array.from(this.botInstances.values());
+  }
+
+  getBot(botId: string): MinecraftBot | undefined {
+    return this.botInstances.get(botId);
+  }
+
+  async connectAllBots(): Promise<void> {
+    const bots = Array.from(this.botInstances.values());
+    for (const bot of bots) {
+      await bot.connect();
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Delay between connections
+    }
+  }
+
+  async disconnectAllBots(): Promise<void> {
+    const bots = Array.from(this.botInstances.values());
+    for (const bot of bots) {
+      await bot.disconnect();
+    }
+  }
+
+  async sendMessageToAll(message: string): Promise<void> {
+    const bots = Array.from(this.botInstances.values());
+    for (const bot of bots) {
+      await bot.sendMessage(message);
+      await new Promise(resolve => setTimeout(resolve, 200)); // Small delay between messages
+    }
+  }
+
+  async sendCommandToAll(command: string): Promise<void> {
+    const bots = Array.from(this.botInstances.values());
+    for (const bot of bots) {
+      await bot.sendCommand(command);
+      await new Promise(resolve => setTimeout(resolve, 200)); // Small delay between commands
+    }
+  }
+
+  getBotStatuses(): any[] {
+    return this.getAllBots().map(bot => bot.getStatus());
+  }
+}
+
 export class MinecraftBot {
   private bot: Bot | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
@@ -11,6 +97,8 @@ export class MinecraftBot {
   private autoJumpInterval: NodeJS.Timeout | null = null;
   private webSocketClients: Set<WebSocket> = new Set();
   private randomUsername: string;
+  private botId: string = 'default';
+  private currentStatus: any = null;
 
   private generateRandomUsername(): string {
     const adjectives = ['Swift', 'Bold', 'Clever', 'Brave', 'Quick', 'Smart', 'Cool', 'Fast', 'Wild', 'Free'];
@@ -24,6 +112,25 @@ export class MinecraftBot {
   constructor() {
     this.randomUsername = this.generateRandomUsername();
     this.initializeBot();
+  }
+
+  setBotId(botId: string): void {
+    this.botId = botId;
+    this.randomUsername = this.generateRandomUsername(); // Generate new username for this bot
+  }
+
+  setWebSocketClients(clients: Set<WebSocket>): void {
+    this.webSocketClients = clients;
+  }
+
+  getStatus(): any {
+    return this.currentStatus || {
+      status: 'offline',
+      username: this.randomUsername,
+      botId: this.botId,
+      uptime: 0,
+      autoJump: false
+    };
   }
 
   addWebSocketClient(ws: WebSocket): void {
@@ -70,9 +177,21 @@ export class MinecraftBot {
       ...status
     });
 
+    // Store status for getStatus method
+    this.currentStatus = {
+      status: newStatus.status,
+      username: this.randomUsername,
+      botId: this.botId,
+      uptime: uptime,
+      autoJump: newStatus.autoJump
+    };
+
     this.broadcastToClients({
       type: 'status',
-      data: newStatus
+      data: {
+        ...newStatus,
+        botId: this.botId
+      }
     });
   }
 
@@ -194,8 +313,8 @@ export class MinecraftBot {
 
   private async executeInitialCommands(): Promise<void> {
     const commands = [
-      '/register 1234512345',
-      '/login 1234512345',
+      '/register 12345678P',
+      '/login 12345678P',
       '/server survival-2'
     ];
 

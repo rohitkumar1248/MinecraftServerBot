@@ -2,20 +2,12 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
-import { MinecraftBot } from "./bot";
+import { MultiBotManager } from "./bot";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import type { WebSocketMessage, CommandData } from "@shared/schema";
 
-// Map to store bot instances per user
-const userBots = new Map<string, MinecraftBot>();
-
-// Get or create bot for user
-function getUserBot(userId: string): MinecraftBot {
-  if (!userBots.has(userId)) {
-    userBots.set(userId, new MinecraftBot());
-  }
-  return userBots.get(userId)!;
-}
+// Global multi-bot manager instance
+const multiBotManager = new MultiBotManager();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
@@ -59,10 +51,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/bot/status", async (req: any, res) => {
     try {
-      const userId = 'default_user';
-      const userBot = getUserBot(userId);
-      const status = await storage.getBotStatus();
-      res.json(status);
+      const statuses = multiBotManager.getBotStatuses();
+      res.json(statuses);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch bot status" });
     }
@@ -115,9 +105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/bot/connect", async (req: any, res) => {
     try {
-      const userId = 'default_user';
-      const userBot = getUserBot(userId);
-      await userBot.connect();
+      await multiBotManager.connectAllBots();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to connect bot" });
@@ -126,9 +114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/bot/disconnect", async (req: any, res) => {
     try {
-      const userId = 'default_user';
-      const userBot = getUserBot(userId);
-      await userBot.disconnect();
+      await multiBotManager.disconnectAllBots();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to disconnect bot" });
@@ -137,9 +123,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/bot/toggle-jump", async (req: any, res) => {
     try {
-      const userId = 'default_user';
-      const userBot = getUserBot(userId);
-      await userBot.toggleAutoJump();
+      // Toggle auto jump for all bots
+      const bots = multiBotManager.getAllBots();
+      for (const bot of bots) {
+        await bot.toggleAutoJump();
+      }
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to toggle auto-jump" });
@@ -148,13 +136,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/bot/update-ip", async (req: any, res) => {
     try {
-      const userId = 'default_user';
       const { serverIp } = req.body;
       if (!serverIp) {
         return res.status(400).json({ error: "Server IP is required" });
       }
-      const userBot = getUserBot(userId);
-      await userBot.updateServerIp(serverIp);
+      // Update server IP for all bots
+      const bots = multiBotManager.getAllBots();
+      for (const bot of bots) {
+        await bot.updateServerIp(serverIp);
+      }
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to update server IP" });
@@ -163,13 +153,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/bot/regenerate-name", async (req: any, res) => {
     try {
-      const userId = 'default_user';
-      const userBot = getUserBot(userId);
-      // Disconnect current bot
-      await userBot.disconnect();
-      // Create a new bot instance with random name
-      userBots.set(userId, new MinecraftBot());
-      res.json({ success: true, message: "New random username generated" });
+      // Regenerate names for all bots
+      await multiBotManager.disconnectAllBots();
+      // The bots will automatically regenerate usernames on reconnect
+      res.json({ success: true, message: "All bot usernames regenerated" });
     } catch (error) {
       res.status(500).json({ error: "Failed to regenerate bot name" });
     }
@@ -216,17 +203,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // In a real implementation, extract userId from authenticated session
         // For now, we'll use a default user or handle it differently
-        const userId = 'default_user'; // This should be extracted from authenticated session
-        const userBot = getUserBot(userId);
-        userBot.addWebSocketClient(ws);
+        // Add WebSocket client to multi-bot manager
+        multiBotManager.addWebSocketClient(ws);
         
         switch (message.type) {
           case 'command':
             const commandData = message.data as CommandData;
             if (commandData.command.startsWith('/')) {
-              await userBot.sendCommand(commandData.command);
+              await multiBotManager.sendCommandToAll(commandData.command);
             } else {
-              await userBot.sendMessage(commandData.command);
+              await multiBotManager.sendMessageToAll(commandData.command);
             }
             break;
             
