@@ -10,8 +10,19 @@ export class MinecraftBot {
   private uptimeStart: number = 0;
   private autoJumpInterval: NodeJS.Timeout | null = null;
   private webSocketClients: Set<WebSocket> = new Set();
+  private randomUsername: string;
+
+  private generateRandomUsername(): string {
+    const adjectives = ['Swift', 'Bold', 'Clever', 'Brave', 'Quick', 'Smart', 'Cool', 'Fast', 'Wild', 'Free'];
+    const nouns = ['Player', 'Gamer', 'Builder', 'Miner', 'Crafter', 'Explorer', 'Hunter', 'Warrior', 'Hero', 'Legend'];
+    const randomNum = Math.floor(Math.random() * 1000);
+    const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const noun = nouns[Math.floor(Math.random() * nouns.length)];
+    return `${adjective}${noun}${randomNum}`;
+  }
 
   constructor() {
+    this.randomUsername = this.generateRandomUsername();
     this.initializeBot();
   }
 
@@ -50,7 +61,7 @@ export class MinecraftBot {
 
     const newStatus = await storage.updateBotStatus({
       status: currentStatus?.status || 'offline',
-      username: currentStatus?.username || 'King97334',
+      username: currentStatus?.username || this.randomUsername,
       server: currentStatus?.server || 'survival-2',
       serverIp: currentStatus?.serverIp || 'tbcraft.cbu.net:25569',
       version: currentStatus?.version || '1.21.4',
@@ -80,7 +91,7 @@ export class MinecraftBot {
       this.bot = createBot({
         host: 'tbcraft.cbu.net',
         port: 25569,
-        username: 'King97334',
+        username: this.randomUsername,
         version: '1.21.4',
         auth: 'offline'
       });
