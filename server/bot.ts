@@ -52,7 +52,7 @@ export class MinecraftBot {
       status: currentStatus?.status || 'offline',
       username: currentStatus?.username || 'King97334',
       server: currentStatus?.server || 'survival-2',
-      serverIp: currentStatus?.serverIp || 'mcfleet.net',
+      serverIp: currentStatus?.serverIp || 'tbcraft.cbu.net:25569',
       version: currentStatus?.version || '1.21.4',
       uptime: uptime,
       autoJump: currentStatus?.autoJump || false,
@@ -74,12 +74,12 @@ export class MinecraftBot {
       await this.updateStatus({ status: 'connecting' });
       await this.addChatMessage({
         type: 'system',
-        message: 'Connecting to mcfleet.net...'
+        message: 'Connecting to tbcraft.cbu.net:25569...'
       });
 
       this.bot = createBot({
-        host: 'mcfleet.net',
-        port: 25565,
+        host: 'tbcraft.cbu.net',
+        port: 25569,
         username: 'King97334',
         version: '1.21.4',
         auth: 'offline'
@@ -108,7 +108,7 @@ export class MinecraftBot {
       });
       await this.addChatMessage({
         type: 'system',
-        message: 'Bot connected successfully to mcfleet.net'
+        message: 'Bot connected successfully to tbcraft.cbu.net:25569'
       });
 
       // Execute required commands in sequence
