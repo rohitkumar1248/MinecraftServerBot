@@ -22,7 +22,6 @@ import {
   Users, 
   MessageSquare, 
   Settings,
-  LogOut,
   Trash2
 } from "lucide-react";
 import { useState } from "react";
@@ -159,15 +158,9 @@ export default function Dashboard() {
                 <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
                 <span className="text-sm">{isConnected ? 'Connected' : 'Disconnected'}</span>
               </div>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => window.location.href = '/api/logout'}
-                data-testid="logout-button"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Logout
-              </Button>
+              <div className="text-sm text-gray-400">
+                Multi-Bot Controller
+              </div>
             </div>
           </div>
         </div>

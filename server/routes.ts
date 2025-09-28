@@ -21,20 +21,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
   await setupAuth(app);
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // Auth routes - now returns default user for direct bot control
+  app.get('/api/auth/user', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
+      // Return a default user for direct access
+      const defaultUser = {
+        id: 'default_user',
+        email: 'bot@controller.local',
+        firstName: 'Bot',
+        lastName: 'Controller'
+      };
+      res.json(defaultUser);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
 
-  // Protected API Routes
-  app.get("/api/chat/messages", isAuthenticated, async (req, res) => {
+  // API Routes - removed authentication requirements for direct access
+  app.get("/api/chat/messages", async (req, res) => {
     try {
       const messages = await storage.getChatMessages();
       res.json(messages);
@@ -43,7 +48,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/chat/messages", isAuthenticated, async (req, res) => {
+  app.delete("/api/chat/messages", async (req, res) => {
     try {
       await storage.clearChatMessages();
       res.json({ success: true });
@@ -52,9 +57,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/bot/status", isAuthenticated, async (req: any, res) => {
+  app.get("/api/bot/status", async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = 'default_user';
       const userBot = getUserBot(userId);
       const status = await storage.getBotStatus();
       res.json(status);
@@ -64,9 +69,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bot instance management
-  app.get("/api/bot/instances", isAuthenticated, async (req: any, res) => {
+  app.get("/api/bot/instances", async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = 'default_user';
       const instances = await storage.getUserBotInstances(userId);
       res.json(instances);
     } catch (error) {
@@ -74,9 +79,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/bot/instances", isAuthenticated, async (req: any, res) => {
+  app.post("/api/bot/instances", async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = 'default_user';
       const { name, username, serverIp, version } = req.body;
       
       const botInstance = await storage.createBotInstance({
@@ -96,9 +101,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/bot/instances/:id/activate", isAuthenticated, async (req: any, res) => {
+  app.put("/api/bot/instances/:id/activate", async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = 'default_user';
       const botId = parseInt(req.params.id);
       
       await storage.setActiveBotInstance(userId, botId);
@@ -108,9 +113,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/bot/connect", isAuthenticated, async (req: any, res) => {
+  app.post("/api/bot/connect", async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = 'default_user';
       const userBot = getUserBot(userId);
       await userBot.connect();
       res.json({ success: true });
@@ -119,9 +124,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/bot/disconnect", isAuthenticated, async (req: any, res) => {
+  app.post("/api/bot/disconnect", async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = 'default_user';
       const userBot = getUserBot(userId);
       await userBot.disconnect();
       res.json({ success: true });
@@ -130,9 +135,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/bot/toggle-jump", isAuthenticated, async (req: any, res) => {
+  app.post("/api/bot/toggle-jump", async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = 'default_user';
       const userBot = getUserBot(userId);
       await userBot.toggleAutoJump();
       res.json({ success: true });
@@ -141,9 +146,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/bot/update-ip", isAuthenticated, async (req: any, res) => {
+  app.post("/api/bot/update-ip", async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = 'default_user';
       const { serverIp } = req.body;
       if (!serverIp) {
         return res.status(400).json({ error: "Server IP is required" });
@@ -156,9 +161,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/bot/regenerate-name", isAuthenticated, async (req: any, res) => {
+  app.post("/api/bot/regenerate-name", async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = 'default_user';
       const userBot = getUserBot(userId);
       // Disconnect current bot
       await userBot.disconnect();
