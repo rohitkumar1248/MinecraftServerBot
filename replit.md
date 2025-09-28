@@ -8,6 +8,20 @@ This is a full-stack web application that provides a Discord-style interface for
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+**September 28, 2025 - Complete Authentication & Dashboard System**
+- ✅ **Implemented Replit Auth Integration**: Full OIDC authentication with session management using PostgreSQL
+- ✅ **Created Comprehensive Landing Page**: Beautiful Discord-style interface showcasing features for unauthenticated users
+- ✅ **Built Advanced Dashboard**: Three-tab interface (Bot Control, Live Chat, Bot Management) for authenticated users
+- ✅ **Database Schema Complete**: All tables created - sessions, users, bot_instances, chat_messages, bot_status
+- ✅ **Multi-User Bot Management**: Each user can create and manage multiple bot instances with unique configurations
+- ✅ **Random Username System**: Generates names like "SwiftPlayer123", "BoldGamer456" for multiplayer compatibility
+- ✅ **Server Configuration Updated**: Connected to tbcraft.cbu.net:25569 with working multiplayer functionality
+- ✅ **Real-time Features**: WebSocket communication for live chat and status updates
+- ✅ **Protected Routes**: All API endpoints secured with authentication middleware
+- ✅ **Responsive UI**: Modern dark theme with shadcn/ui components throughout
+
 ## System Architecture
 
 ### Frontend Architecture

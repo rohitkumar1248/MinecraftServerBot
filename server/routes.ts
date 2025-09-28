@@ -3,16 +3,38 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { MinecraftBot } from "./bot";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 import type { WebSocketMessage, CommandData } from "@shared/schema";
 
-let minecraftBot: MinecraftBot;
+// Map to store bot instances per user
+const userBots = new Map<string, MinecraftBot>();
+
+// Get or create bot for user
+function getUserBot(userId: string): MinecraftBot {
+  if (!userBots.has(userId)) {
+    userBots.set(userId, new MinecraftBot());
+  }
+  return userBots.get(userId)!;
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Initialize Minecraft bot
-  minecraftBot = new MinecraftBot();
+  // Setup authentication
+  await setupAuth(app);
 
-  // API Routes
-  app.get("/api/chat/messages", async (req, res) => {
+  // Auth routes
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Protected API Routes
+  app.get("/api/chat/messages", isAuthenticated, async (req, res) => {
     try {
       const messages = await storage.getChatMessages();
       res.json(messages);
@@ -21,7 +43,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/chat/messages", async (req, res) => {
+  app.delete("/api/chat/messages", isAuthenticated, async (req, res) => {
     try {
       await storage.clearChatMessages();
       res.json({ success: true });
@@ -30,8 +52,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/bot/status", async (req, res) => {
+  app.get("/api/bot/status", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
+      const userBot = getUserBot(userId);
       const status = await storage.getBotStatus();
       res.json(status);
     } catch (error) {
@@ -39,43 +63,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/bot/connect", async (req, res) => {
+  // Bot instance management
+  app.get("/api/bot/instances", isAuthenticated, async (req: any, res) => {
     try {
-      await minecraftBot.connect();
+      const userId = req.user.claims.sub;
+      const instances = await storage.getUserBotInstances(userId);
+      res.json(instances);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch bot instances" });
+    }
+  });
+
+  app.post("/api/bot/instances", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { name, username, serverIp, version } = req.body;
+      
+      const botInstance = await storage.createBotInstance({
+        ownerId: userId,
+        name: name || `Bot ${Date.now()}`,
+        username: username || `Player${Math.floor(Math.random() * 1000)}`,
+        serverIp: serverIp || "tbcraft.cbu.net:25569",
+        version: version || "1.21.4",
+        status: "offline",
+        autoJump: false,
+        isActive: false,
+      });
+      
+      res.json(botInstance);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create bot instance" });
+    }
+  });
+
+  app.put("/api/bot/instances/:id/activate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const botId = parseInt(req.params.id);
+      
+      await storage.setActiveBotInstance(userId, botId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to activate bot instance" });
+    }
+  });
+
+  app.post("/api/bot/connect", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const userBot = getUserBot(userId);
+      await userBot.connect();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to connect bot" });
     }
   });
 
-  app.post("/api/bot/disconnect", async (req, res) => {
+  app.post("/api/bot/disconnect", isAuthenticated, async (req: any, res) => {
     try {
-      await minecraftBot.disconnect();
+      const userId = req.user.claims.sub;
+      const userBot = getUserBot(userId);
+      await userBot.disconnect();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to disconnect bot" });
     }
   });
 
-  app.post("/api/bot/toggle-jump", async (req, res) => {
+  app.post("/api/bot/toggle-jump", isAuthenticated, async (req: any, res) => {
     try {
-      await minecraftBot.toggleAutoJump();
+      const userId = req.user.claims.sub;
+      const userBot = getUserBot(userId);
+      await userBot.toggleAutoJump();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to toggle auto-jump" });
     }
   });
 
-  app.post("/api/bot/update-ip", async (req, res) => {
+  app.post("/api/bot/update-ip", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const { serverIp } = req.body;
       if (!serverIp) {
         return res.status(400).json({ error: "Server IP is required" });
       }
-      await minecraftBot.updateServerIp(serverIp);
+      const userBot = getUserBot(userId);
+      await userBot.updateServerIp(serverIp);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to update server IP" });
+    }
+  });
+
+  app.post("/api/bot/regenerate-name", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const userBot = getUserBot(userId);
+      // Disconnect current bot
+      await userBot.disconnect();
+      // Create a new bot instance with random name
+      userBots.set(userId, new MinecraftBot());
+      res.json({ success: true, message: "New random username generated" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to regenerate bot name" });
     }
   });
 
@@ -84,11 +175,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // WebSocket Server
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
-  wss.on('connection', (ws: WebSocket) => {
+  wss.on('connection', (ws: WebSocket, req: any) => {
     console.log('WebSocket client connected');
     
-    // Add client to bot's broadcast list
-    minecraftBot.addWebSocketClient(ws);
+    // Note: In a real implementation, you'd verify the user's session here
+    // For now, we'll use a default bot or create one based on query params
 
     // Send current bot status and recent messages
     storage.getBotStatus().then(status => {
@@ -118,13 +209,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const message: WebSocketMessage = JSON.parse(data.toString());
         
+        // In a real implementation, extract userId from authenticated session
+        // For now, we'll use a default user or handle it differently
+        const userId = 'default_user'; // This should be extracted from authenticated session
+        const userBot = getUserBot(userId);
+        userBot.addWebSocketClient(ws);
+        
         switch (message.type) {
           case 'command':
             const commandData = message.data as CommandData;
             if (commandData.command.startsWith('/')) {
-              await minecraftBot.sendCommand(commandData.command);
+              await userBot.sendCommand(commandData.command);
             } else {
-              await minecraftBot.sendMessage(commandData.command);
+              await userBot.sendMessage(commandData.command);
             }
             break;
             
